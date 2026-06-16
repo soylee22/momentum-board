@@ -46,6 +46,11 @@ tbody tr:hover{background:var(--card)}
 .k-cell{position:relative}
 .tag{font-size:9.5px;letter-spacing:.05em;padding:2px 6px;border-radius:3px;border:1px solid var(--hair2);color:var(--mute)}
 .ctry{font-family:var(--mono);font-size:11px;color:var(--mute)}
+.ct{font-size:10px;letter-spacing:.03em;padding:2px 7px;border-radius:3px;white-space:nowrap;font-weight:600}
+.ct-firing{background:#10d07018;color:var(--green);border:1px solid #10d07055}
+.ct-resting{background:#c99a2e18;color:var(--amber);border:1px solid #c99a2e55}
+.ct-cyclical{background:#c2564a18;color:var(--clay);border:1px solid #c2564a55}
+.ct-none{color:var(--dim);border:1px solid var(--hair2)}
 .s2dot{display:inline-block;width:8px;height:8px;border-radius:50%}
 .s2on{background:var(--green);box-shadow:0 0 6px #10d07066}
 .s2off{border:1px solid var(--hair2)}
@@ -71,6 +76,7 @@ footer b{color:var(--mute)}
   <label>Min mkt-cap $m<input type="number" id="fMc" value="200" step="100" style="width:96px"/></label>
   <label>Min 12-1 %<input type="number" id="fM" value="" placeholder="any" style="width:84px"/></label>
   <label>Min K-ratio<input type="number" id="fK" value="" placeholder="any" style="width:84px"/></label>
+  <label>Type<select id="fCat"><option value="">All</option><option value="firing">Compounder firing</option><option value="resting">Quality resting</option><option value="cyclical">Cyclical momentum</option><option value="none">No clear trend</option></select></label>
   <label class="chk"><input type="checkbox" id="fS2"/> Stage-2 trend only</label>
   <label class="chk"><input type="checkbox" id="fLiq"/> Liquid &gt;$5m/day</label>
 </div>
@@ -83,7 +89,7 @@ footer b{color:var(--mute)}
 </div>
 
 <footer>
-  <b>How to read it.</b> <b>12-1 mom</b> = total return over the 12 months ending one month ago (the skipped last month avoids short-term reversal). <b>K 1y / 3y / 5y</b> = K-ratio (slope &divide; standard error of log-price regressed on time) over 1, 3 and 5 years: higher = smoother, steadier grind; negative = broken/downtrend. Reading the three together: high on all = durable compounder in form; high 1y but low 5y = cyclical/thematic in its moment (rides until it breaks); low 1y but high 5y = quality compounder in a soft patch. <b>Last-mo</b> = most recent month return (watch this against a high 12-1: a big negative here can mean the trend is breaking even while 12-1 still looks great). <b>vs 50/150/200</b> = price relative to its moving averages; all green = textbook uptrend. <b>S2</b> = Minervini Stage-2 trend template passed. <b>ADV</b> = avg daily $ traded (liquidity); below ~$5m gets expensive to trade. <b>52wH</b> = distance from the 52-week high.
+  <b>How to read it.</b> <b>12-1 mom</b> = total return over the 12 months ending one month ago (the skipped last month avoids short-term reversal). <b>K 1y / 3y / 5y</b> = K-ratio (slope &divide; standard error of log-price regressed on time) over 1, 3 and 5 years: higher = smoother, steadier grind; negative = broken/downtrend. Reading the three together: high on all = durable compounder in form; high 1y but low 5y = cyclical/thematic in its moment (rides until it breaks); low 1y but high 5y = quality compounder in a soft patch. <b>Last-mo</b> = most recent month return (watch this against a high 12-1: a big negative here can mean the trend is breaking even while 12-1 still looks great). <b>vs 50/150/200</b> = price relative to its moving averages; all green = textbook uptrend. <b>Type</b> classifies each name from its K-ratios: <span class="ct ct-firing">Firing</span> = durable AND in form (K5y&ge;60, K1y&ge;20), the quality-momentum sweet spot; <span class="ct ct-resting">Resting</span> = durable long trend but momentum soft right now (quality on sale, a watchlist not an auto-buy, recent weakness predicts more weakness until it turns); <span class="ct ct-cyclical">Cyclical</span> = trending now but not a durable multi-year grind (ride till it breaks); <span class="ct ct-none">flat</span> = no clear trend. <b>S2</b> = Minervini Stage-2 trend template passed. <b>ADV</b> = avg daily $ traded (liquidity); below ~$5m gets expensive to trade. <b>52wH</b> = distance from the 52-week high.
   <br><br>Universe: S&amp;P 500 / 400 / 600 + FTSE 100 / 250 + US $200m-1bn. Click a ticker for Yahoo Finance. Data is a snapshot, survivorship-biased to current index members, and is not investment advice.
 </footer>
 
@@ -93,6 +99,7 @@ const COLS=[
  {k:'t',t:'Ticker',cls:'l'},
  {k:'name',t:'Name',cls:'l nm'},
  {k:'ctry',t:'Ctry',cls:'l'},
+ {k:'cat',t:'Type',cls:'l'},
  {k:'sec',t:'Sector',cls:'l sec-col'},
  {k:'px',t:'Price'},
  {k:'mc',t:'Mkt $m',n:1},
@@ -110,6 +117,14 @@ const COLS=[
 ];
 let DATA=[], view=[], sortK='m12_1', sortAsc=false, kmax=1;
 
+const CAT={firing:['Firing','ct-firing'],resting:['Resting','ct-resting'],cyclical:['Cyclical','ct-cyclical'],none:['flat','ct-none']};
+function categorize(r){
+  const k1=r.k, k5=r.k5;
+  if(k5!==null && k5>=60 && k1!==null && k1>=20) return 'firing';     // durable AND in form
+  if(k5!==null && k5>=60) return 'resting';                            // durable but momentum soft/negative
+  if(k1!==null && k1>=20) return 'cyclical';                           // firing now, not a durable long trend
+  return 'none';
+}
 const num=v=>v===null||v===undefined||v===''?null:+v;
 const fmt=(v,d=1)=>v===null?'<span class="muted">·</span>':(+v).toLocaleString('en-US',{minimumFractionDigits:d,maximumFractionDigits:d});
 const sign=v=>v===null?'neu':v>0?'pos':v<0?'neg':'neu';
@@ -128,6 +143,7 @@ function passes(r){
   const c=document.getElementById('fCtry').value; if(c && r.ctry!==c)return false;
   const ix=document.getElementById('fIdx').value; if(ix && r.idx!==ix)return false;
   const sc=document.getElementById('fSec').value; if(sc && r.sec!==sc)return false;
+  const ct=document.getElementById('fCat').value; if(ct && r.cat!==ct)return false;
   const mc=num(document.getElementById('fMc').value); if(mc!==null && r.mc!==null && r.mc<mc)return false;
   const mm=num(document.getElementById('fM').value); if(mm!==null && (r.m12_1===null||r.m12_1<mm))return false;
   const mk=num(document.getElementById('fK').value); if(mk!==null && (r.k===null||r.k<mk))return false;
@@ -152,6 +168,7 @@ function render(){
       if(c.k==='t')return `<td class="l"><a class="tk" target="_blank" href="https://finance.yahoo.com/quote/${encodeURIComponent(r.t)}">${r.t.replace('.L','')}</a></td>`;
       if(c.k==='name')return `<td class="l nm">${r.name||''}</td>`;
       if(c.k==='ctry')return `<td class="l"><span class="ctry">${r.ctry}</span></td>`;
+      if(c.k==='cat'){const L=CAT[r.cat];return `<td class="l"><span class="ct ${L[1]}">${L[0]}</span></td>`;}
       if(c.k==='sec')return `<td class="l sec-col nm">${r.sec||''}</td>`;
       if(c.k==='s2')return `<td><span class="s2dot ${r.s2?'s2on':'s2off'}"></span></td>`;
       if(c.k==='px')return `<td>${fmt(r.px,2)}<span class="muted" style="font-size:9px"> ${r.ccy==='GBp'?'p':'$'}</span></td>`;
@@ -172,7 +189,7 @@ function fillSelect(id,vals){
   s.innerHTML='<option value="">All</option>'+[...new Set(vals.filter(Boolean))].sort().map(v=>`<option>${v}</option>`).join('');
 }
 fetch('data.json').then(r=>r.json()).then(d=>{
-  DATA=d.rows.map(r=>({...r}));
+  DATA=d.rows.map(r=>({...r,cat:categorize(r)}));
   kmax=Math.max(...DATA.map(r=>r.k||0));
   document.getElementById('metabox');
   document.querySelector('.sub').insertAdjacentHTML('beforeend',
@@ -184,7 +201,7 @@ fetch('data.json').then(r=>r.json()).then(d=>{
     const el=document.getElementById(id);
     el.addEventListener(id==='q'||id.startsWith('fM')||id==='fK'?'input':'change',render);
   });
-  ['fS2','fLiq'].forEach(id=>document.getElementById(id).addEventListener('change',render));
+  ['fS2','fLiq','fCat'].forEach(id=>document.getElementById(id).addEventListener('change',render));
   render();
 }).catch(e=>{document.getElementById('tb').innerHTML=`<tr><td class="l" style="padding:30px;color:var(--clay)">Failed to load data.json: ${e}</td></tr>`;});
 </script>
