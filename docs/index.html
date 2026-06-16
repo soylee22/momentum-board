@@ -83,7 +83,7 @@ footer b{color:var(--mute)}
 </div>
 
 <footer>
-  <b>How to read it.</b> <b>12-1 mom</b> = total return over the 12 months ending one month ago (the skipped last month avoids short-term reversal). <b>K-ratio</b> = slope &divide; standard error of a regression of log-price on time: higher means a smoother, steadier grind, lower/negative means spiky. <b>Last-mo</b> = most recent month return (watch this against a high 12-1: a big negative here can mean the trend is breaking even while 12-1 still looks great). <b>vs 50/150/200</b> = price relative to its moving averages; all green = textbook uptrend. <b>S2</b> = Minervini Stage-2 trend template passed. <b>ADV</b> = avg daily $ traded (liquidity); below ~$5m gets expensive to trade. <b>52wH</b> = distance from the 52-week high.
+  <b>How to read it.</b> <b>12-1 mom</b> = total return over the 12 months ending one month ago (the skipped last month avoids short-term reversal). <b>K 1y / 3y / 5y</b> = K-ratio (slope &divide; standard error of log-price regressed on time) over 1, 3 and 5 years: higher = smoother, steadier grind; negative = broken/downtrend. Reading the three together: high on all = durable compounder in form; high 1y but low 5y = cyclical/thematic in its moment (rides until it breaks); low 1y but high 5y = quality compounder in a soft patch. <b>Last-mo</b> = most recent month return (watch this against a high 12-1: a big negative here can mean the trend is breaking even while 12-1 still looks great). <b>vs 50/150/200</b> = price relative to its moving averages; all green = textbook uptrend. <b>S2</b> = Minervini Stage-2 trend template passed. <b>ADV</b> = avg daily $ traded (liquidity); below ~$5m gets expensive to trade. <b>52wH</b> = distance from the 52-week high.
   <br><br>Universe: S&amp;P 500 / 400 / 600 + FTSE 100 / 250 + US $200m-1bn. Click a ticker for Yahoo Finance. Data is a snapshot, survivorship-biased to current index members, and is not investment advice.
 </footer>
 
@@ -97,7 +97,9 @@ const COLS=[
  {k:'px',t:'Price'},
  {k:'mc',t:'Mkt $m',n:1},
  {k:'m12_1',t:'12-1 %',n:1,col:1},
- {k:'k',t:'K-ratio',n:1},
+ {k:'k',t:'K 1y',n:1},
+ {k:'k3',t:'K 3y',n:1,col:1},
+ {k:'k5',t:'K 5y',n:1,col:1},
  {k:'m1',t:'Last-mo %',n:1,col:1},
  {k:'vs50',t:'vs50',n:1,col:1},
  {k:'vs150',t:'vs150',n:1,col:1},
