@@ -51,6 +51,13 @@ tbody tr:hover{background:var(--card)}
 .ct-resting{background:#c99a2e18;color:var(--amber);border:1px solid #c99a2e55}
 .ct-cyclical{background:#c2564a18;color:var(--clay);border:1px solid #c2564a55}
 .ct-none{color:var(--dim);border:1px solid var(--hair2)}
+.presets{display:flex;flex-wrap:wrap;gap:8px;padding:14px 26px 0;align-items:center}
+.preset{background:var(--card);border:1px solid var(--hair2);color:var(--mute);font-family:var(--sans);font-size:12px;font-weight:600;letter-spacing:.02em;padding:7px 13px;border-radius:6px;cursor:pointer;white-space:nowrap}
+.preset:hover{color:var(--bone);border-color:var(--mute)}
+.preset.on{color:var(--ink);background:var(--green);border-color:var(--green)}
+.preset.warn.on{background:var(--amber);border-color:var(--amber)}
+.preset-desc{padding:9px 26px 0;color:var(--mute);font-size:11.5px;min-height:15px;max-width:1200px;line-height:1.5}
+.preset-desc b{color:var(--bone)}
 .s2dot{display:inline-block;width:8px;height:8px;border-radius:50%}
 .s2on{background:var(--green);box-shadow:0 0 6px #10d07066}
 .s2off{border:1px solid var(--hair2)}
@@ -67,6 +74,9 @@ footer b{color:var(--mute)}
   <div class="title">MOMENTUM<span class="dot">.</span>BOARD</div>
   <div class="sub">Every stock ranked by 12-1 momentum, gated on trend quality. <span id="meta"></span></div>
 </header>
+
+<div class="presets" id="presets"></div>
+<div class="preset-desc" id="presetDesc"></div>
 
 <div class="controls">
   <label>Search<input type="text" id="q" placeholder="ticker or name"/></label>
@@ -125,6 +135,31 @@ function categorize(r){
   if(k1!==null && k1>=20) return 'cyclical';                           // firing now, not a durable long trend
   return 'none';
 }
+let PRESET_PRED=null, activePreset=null;
+const PRESETS=[
+ {id:'prime',label:'★ Prime Buys',desc:'Durable + firing + confirmed uptrend, in the BUY ZONE. Above its 50-day, last month between -6% and +14% (no fresh spike to chase, no rollover under a lagging label). The clean entries, sorted by current trend strength.',set:{cat:'firing',s2:true,liq:true,sort:'k',asc:false},pred:r=>r.m1!=null&&r.m1>=-6&&r.m1<=14&&r.vs50!=null&&r.vs50>0&&r.vs200!=null&&r.vs200>0},
+ {id:'quality',label:'Quality Momentum',desc:'Durable + firing + confirmed uptrend + liquid, ranked by current trend strength (K1y). The core default screen.',set:{cat:'firing',s2:true,liq:true,sort:'k',asc:false}},
+ {id:'durable',label:'Durable (K5y)',desc:'Same quality set, ranked by 5-year durability. Lower-turnover, proven compounders that are in form.',set:{cat:'firing',s2:true,liq:true,sort:'k5',asc:false}},
+ {id:'onsale',label:'Quality on Sale',desc:'Durable compounders that went soft and are now turning back up (positive last month, confirmed uptrend). The dip-buys, after the turn, not while still falling.',set:{cat:'resting',s2:true,liq:true,sort:'k',asc:false},pred:r=>r.m1!=null&&r.m1>0},
+ {id:'atrisk',label:'At Risk / Trim',warn:true,desc:'Firing-pedigree names LOSING it. Down more than 7% last month, or below their 50-day. A trim and early-warning list, not a buy list.',set:{cat:'firing',s2:false,liq:true,sort:'k',asc:false},pred:r=>(r.m1!=null&&r.m1<-7)||(r.vs50!=null&&r.vs50<0)},
+ {id:'raw',label:'Raw Leaders',desc:'Pure 12-1 momentum, no quality gate. The firehose, including the spikes the disciplined screens filter out. For context only.',set:{cat:'',s2:false,liq:true,sort:'m12_1',asc:false}},
+ {id:'all',label:'Everything',desc:'No preset. All stocks, drive the filters manually.',set:{cat:'',s2:false,liq:false,sort:'m12_1',asc:false}},
+];
+function applyPreset(p){
+  document.getElementById('fCat').value=p.set.cat||'';
+  document.getElementById('fS2').checked=!!p.set.s2;
+  document.getElementById('fLiq').checked=!!p.set.liq;
+  document.getElementById('fM').value=''; document.getElementById('fK').value=''; document.getElementById('q').value='';
+  sortK=p.set.sort; sortAsc=!!p.set.asc; PRESET_PRED=p.pred||null; activePreset=p.id;
+  document.querySelectorAll('.preset').forEach(b=>b.classList.toggle('on',b.dataset.id===p.id));
+  document.getElementById('presetDesc').innerHTML='<b>'+p.label.replace('★ ','')+'.</b> '+p.desc;
+  render();
+}
+function buildPresets(){
+  const bar=document.getElementById('presets');
+  bar.innerHTML=PRESETS.map(p=>`<button class="preset${p.warn?' warn':''}" data-id="${p.id}">${p.label}</button>`).join('');
+  bar.querySelectorAll('.preset').forEach(b=>b.onclick=()=>applyPreset(PRESETS.find(p=>p.id===b.dataset.id)));
+}
 const num=v=>v===null||v===undefined||v===''?null:+v;
 const fmt=(v,d=1)=>v===null?'<span class="muted">·</span>':(+v).toLocaleString('en-US',{minimumFractionDigits:d,maximumFractionDigits:d});
 const sign=v=>v===null?'neu':v>0?'pos':v<0?'neg':'neu';
@@ -138,6 +173,7 @@ function buildHead(){
   });
 }
 function passes(r){
+  if(PRESET_PRED && !PRESET_PRED(r))return false;
   const q=document.getElementById('q').value.trim().toLowerCase();
   if(q && !((r.t||'').toLowerCase().includes(q)||(r.name||'').toLowerCase().includes(q)))return false;
   const c=document.getElementById('fCtry').value; if(c && r.ctry!==c)return false;
@@ -202,7 +238,8 @@ fetch('data.json').then(r=>r.json()).then(d=>{
     el.addEventListener(id==='q'||id.startsWith('fM')||id==='fK'?'input':'change',render);
   });
   ['fS2','fLiq','fCat'].forEach(id=>document.getElementById(id).addEventListener('change',render));
-  render();
+  buildPresets();
+  applyPreset(PRESETS.find(p=>p.id==='quality'));
 }).catch(e=>{document.getElementById('tb').innerHTML=`<tr><td class="l" style="padding:30px;color:var(--clay)">Failed to load data.json: ${e}</td></tr>`;});
 </script>
 </body>
