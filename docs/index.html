@@ -80,7 +80,7 @@ footer b{color:var(--mute)}
 
 <div class="controls">
   <label>Search<input type="text" id="q" placeholder="ticker or name"/></label>
-  <label>Country<select id="fCtry"><option value="">All</option><option>US</option><option>UK</option></select></label>
+  <label>Country<select id="fCtry"></select></label>
   <label>Index<select id="fIdx"></select></label>
   <label>Sector<select id="fSec"></select></label>
   <label>Min mkt-cap $m<input type="number" id="fMc" value="200" step="100" style="width:96px"/></label>
@@ -209,7 +209,7 @@ function render(){
       if(c.k==='cat'){const L=CAT[r.cat];return `<td class="l"><span class="ct ${L[1]}">${L[0]}</span></td>`;}
       if(c.k==='sec')return `<td class="l sec-col nm">${r.sec||''}</td>`;
       if(c.k==='s2')return `<td><span class="s2dot ${r.s2?'s2on':'s2off'}"></span></td>`;
-      if(c.k==='px')return `<td>${fmt(r.px,2)}<span class="muted" style="font-size:9px"> ${r.ccy==='GBp'?'p':'$'}</span></td>`;
+      if(c.k==='px'){const cs={USD:'$',GBp:'p',EUR:'€',CAD:'C$'}[r.ccy]||'';return `<td>${fmt(r.px,2)}<span class="muted" style="font-size:9px"> ${cs}</span></td>`;}
       if(c.k==='mc')return `<td>${r.mc===null?'<span class=muted>·</span>':(r.mc>=1000?(r.mc/1000).toFixed(1)+'k':fmt(r.mc,0))}</td>`;
       if(c.k==='k'){const w=r.k===null?0:Math.max(0,Math.min(60,r.k))/60*34;
         return `<td class="k-cell">${fmt(r.k)}${r.k>0?`<span class="scalebar" style="width:${w}px"></span>`:''}</td>`;}
@@ -232,6 +232,7 @@ fetch('data.json').then(r=>r.json()).then(d=>{
   document.getElementById('metabox');
   document.querySelector('.sub').insertAdjacentHTML('beforeend',
     ` &nbsp;·&nbsp; <b>${d.n.toLocaleString()}</b> stocks &nbsp;·&nbsp; generated <b>${d.generated}</b>`);
+  fillSelect('fCtry',DATA.map(r=>r.ctry));
   fillSelect('fIdx',DATA.map(r=>r.idx));
   fillSelect('fSec',DATA.map(r=>r.sec));
   buildHead();
