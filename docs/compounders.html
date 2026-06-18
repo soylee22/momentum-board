@@ -35,6 +35,11 @@ input[type=text]{min-width:180px}
 input:focus,select:focus{border-color:var(--green)}
 .chk{flex-direction:row!important;align-items:center;gap:7px;cursor:pointer;padding-top:14px}
 .chk input{accent-color:var(--green);width:15px;height:15px}
+.seg{display:flex;border:1px solid var(--hair2);border-radius:6px;overflow:hidden;width:fit-content}
+.segb{background:var(--panel);border:none;border-right:1px solid var(--hair2);color:var(--mute);font-family:var(--sans);font-size:12px;font-weight:600;padding:7px 13px;cursor:pointer}
+.segb:last-child{border-right:none}
+.segb:hover{color:var(--ink)}
+.segb.on{background:var(--green);color:#fff}
 .wrap{overflow:auto;max-height:calc(100vh - 210px)}
 table{border-collapse:collapse;width:100%;font-size:12.5px}
 thead th{position:sticky;top:0;background:var(--panel);color:var(--mute);font-weight:600;text-transform:uppercase;letter-spacing:.05em;font-size:10px;
@@ -86,7 +91,16 @@ footer b{color:var(--mute)}
   <label>Min history (yrs)<input type="number" id="fHy" value="" placeholder="any" style="width:96px"/></label>
   <label>Min mkt-cap $m<input type="number" id="fMc" value="" placeholder="any" step="100" style="width:96px"/></label>
   <label class="chk"><input type="checkbox" id="fLiq" checked/> Liquid &gt;$5m/day</label>
-  <label>Growth weight % <span style="text-transform:none;color:var(--dim);letter-spacing:0">score tab</span><input type="number" id="fW" value="50" min="0" max="100" step="10" style="width:72px"/></label>
+  <label id="wlab">Growth tilt
+    <span class="seg" id="wbtns">
+      <button type="button" class="segb" data-w="0.2">Steady</button>
+      <button type="button" class="segb" data-w="0.5">Balanced</button>
+      <button type="button" class="segb" data-w="0.8">Growth</button>
+    </span>
+  </label>
+  <label id="cslab">Consistency over
+    <select id="consSpan"><option value="20">last 20y</option><option value="30">last 30y</option><option value="all">full history</option></select>
+  </label>
 </div>
 
 <div class="wrap">
@@ -105,10 +119,10 @@ const TABS=[
  {id:'k',   label:'Raw K',            desc:'<b>Raw K-ratio</b> per window (slope &divide; standard error of log-price vs time): steadiness of the climb. Bigger = steadier. CAVEAT: K is a t-statistic, so it grows with window length. A 50y K is mechanically larger than a 10y K for the same smoothness. <b>Compare DOWN a column, not across.</b>'},
  {id:'avgk',label:'Average K (K&divide;yrs)',desc:'<b>K divided by the window’s years.</b> Cancels the length effect, so columns ARE comparable across horizons: a flat row = equally steady at every horizon; a falling row = rougher in the older (longer) windows.'},
  {id:'g',   label:'Growth (G %/yr)',  desc:'<b>Annualised trend growth</b> (%/yr) from the same regression: how FAST it compounded, regardless of smoothness.'},
- {id:'score',label:'Compounder score', desc:'<b>0-100 ABSOLUTE blend of growth + steadiness.</b> Growth is scored against a fixed 30%/yr yardstick and steadiness against a fixed avg-K of 25 (not against the other names on screen), so the score is stable and does NOT change as you filter. The two are combined as a GEOMETRIC mean, so a name must score on BOTH. <b>Growth weight %</b> tilts it (50 balanced / 100 pure growth / 0 pure steadiness). A ratio (growth&divide;steadiness) would be wrong, it rewards jaggedness; this blends.'},
- {id:'cons',label:'Consistency (across horizons)', desc:'<b>Is it steady-and-high at EVERY horizon, not just one?</b> Shows the avg-K profile (10-50y) plus <b>Mean</b> = average avg-K across the windows the name has, and <b>Consistency = Mean − SD</b> (high mean AND low scatter across horizons scores high). Needs &ge;3 windows (&ge;20y). KO scores below JNJ/PG here: higher near-term K but it fades at 30-50y, while they stay flat. Set a Min-history filter for a clean like-for-like.'},
+ {id:'score',label:'Compounder score', desc:'<b>0-100 ABSOLUTE blend of growth + steadiness.</b> Growth is scored against a fixed 30%/yr yardstick and steadiness against a fixed avg-K of 25 (not against the other names on screen), so the score is stable and does NOT change as you filter. The two are combined as a GEOMETRIC mean, so a name must score on BOTH. The <b>Growth tilt</b> buttons (Steady / Balanced / Growth) shift the emphasis between steadiness and growth. A ratio (growth&divide;steadiness) would be wrong, it rewards jaggedness; this blends.'},
+ {id:'cons',label:'Consistency (across horizons)', desc:'<b>Is it steady-and-high at EVERY horizon, not just one?</b> Shows the avg-K profile (10-50y) plus <b>Mean</b> and <b>Consistency = Mean − SD</b> of avg-K (high mean AND low scatter scores high). Use <b>Consistency over</b> to pick the lookback: <b>last 20y / last 30y</b> grade every name on the SAME ladder (fair like-for-like, so a 50y name is not punished for an ancient rough patch a 20y name simply lacks the data to show); <b>full history</b> judges each name on its own whole life (uneven, not cross-comparable). KO scores below JNJ/PG: higher near-term K but it fades at 30-50y while they stay flat.'},
 ];
-let DATA=[], metric='k', sortKey='c20', asc=false, WG=0.5, curCols=[];
+let DATA=[], metric='k', sortKey='c20', asc=false, WG=0.5, CONSSPAN='20', curCols=[];
 const IDF=['rank','t','name','ctry','sec','px','hy'];
 
 const num=v=>v===null||v===undefined||v===''?null:+v;
@@ -123,12 +137,18 @@ function score(r,w){                                                            
   const ng=clamp(g/GCAP,0,1), nk=clamp((k/w)/KCAP,0,1);
   return Math.round(Math.pow(ng,WG)*Math.pow(nk,1-WG)*100);
 }
+function consWindows(){return CONSSPAN==='20'?[10,15,20]:CONSSPAN==='30'?[10,15,20,25,30]:WINS;}
 function consStats(r){
-  const xs=WINS.map(w=>avgK(r,w)).filter(v=>v!==null);
-  if(xs.length<3)return {mean:null,cons:null,n:xs.length};
+  // Fixed spans (20/30): require ALL windows in the set, so every scored name is judged on the
+  // SAME ladder (a 50y name is graded on its recent 20y just like a 20y name, no unfair extra
+  // ancient-rough penalty). 'full history': use whatever it has (>=3), each judged on its own life.
+  const ws=consWindows();
+  let xs=ws.map(w=>avgK(r,w));
+  if(CONSSPAN==='all'){xs=xs.filter(v=>v!==null); if(xs.length<3)return {mean:null,cons:null};}
+  else if(xs.some(v=>v===null))return {mean:null,cons:null};
   const mean=xs.reduce((a,b)=>a+b,0)/xs.length;
   const sd=Math.sqrt(xs.reduce((a,b)=>a+(b-mean)**2,0)/xs.length);
-  return {mean:r1(mean), cons:r1(mean-sd), n:xs.length};
+  return {mean:r1(mean), cons:r1(mean-sd)};
 }
 // the metric columns for the active tab: each {key,label,val(r),d}
 function metricCols(){
@@ -164,6 +184,8 @@ function setMetric(m){
   sortKey = m==='cons' ? 'cons' : 'c20';   // default: 20y window, or the consistency score
   document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('on',b.dataset.id===m));
   document.getElementById('tabdesc').innerHTML=TABS.find(t=>t.id===m).desc;
+  document.getElementById('wlab').style.display = m==='score'?'':'none';   // weight buttons: score tab only
+  document.getElementById('cslab').style.display = m==='cons'?'':'none';   // lookback selector: consistency tab only
   draw();
 }
 function draw(){           // tab/column change: rebuild header THEN body
@@ -194,10 +216,10 @@ function passes(r){
   const hy=num(document.getElementById('fHy').value); if(hy!==null && (r.hy===null||r.hy<hy))return false;
   const mc=num(document.getElementById('fMc').value); if(mc!==null && (r.mc===null||r.mc<mc))return false;
   if(document.getElementById('fLiq').checked && (r.adv===null||r.adv<5))return false;
+  if(metric==='cons' && consStats(r).cons===null)return false; // only names scorable at the chosen lookback
   return true;
 }
 function paint(){          // filter/sort/weight change: recompute values + body, header unchanged
-  WG=clamp((num(document.getElementById('fW').value)??50)/100,0,1);
   let view=DATA.filter(passes);
   view.sort((a,b)=>{
     let x=valueFor(a,sortKey), y=valueFor(b,sortKey);
@@ -244,8 +266,17 @@ fetch('data.json').then(r=>r.json()).then(d=>{
   document.querySelector('.sub').insertAdjacentHTML('beforeend',` &nbsp;&middot;&nbsp; generated <b>${d.generated}</b>`);
   fillSelect('fCtry',DATA.map(r=>r.ctry));
   fillSelect('fSec',DATA.map(r=>r.sec));
-  ['q','fHy','fMc','fW'].forEach(id=>document.getElementById(id).addEventListener('input',paint));
+  ['q','fHy','fMc'].forEach(id=>document.getElementById(id).addEventListener('input',paint));
   ['fCtry','fSec','fLiq'].forEach(id=>document.getElementById(id).addEventListener('change',paint));
+  // growth-tilt segmented buttons (score tab)
+  document.querySelectorAll('#wbtns .segb').forEach(b=>b.onclick=()=>{
+    WG=+b.dataset.w;
+    document.querySelectorAll('#wbtns .segb').forEach(x=>x.classList.toggle('on',x===b));
+    paint();
+  });
+  document.querySelector('#wbtns .segb[data-w="0.5"]').classList.add('on'); // default Balanced
+  // consistency lookback selector (consistency tab)
+  document.getElementById('consSpan').addEventListener('change',e=>{CONSSPAN=e.target.value;paint();});
   buildTabs();
   setMetric('k');   // -> draw() builds header + body
 }).catch(e=>{document.getElementById('tb').innerHTML=`<tr><td class="l" style="padding:30px;color:var(--neg)">Failed to load data.json: ${e}</td></tr>`;});
