@@ -66,13 +66,33 @@ footer{padding:16px 26px 40px;color:var(--dim);font-size:11px;line-height:1.7;bo
 footer b{color:var(--mute)}
 .count{color:var(--green);font-family:var(--mono)}
 .scalebar{display:inline-block;height:3px;background:var(--green);vertical-align:middle;margin-left:6px;border-radius:2px;opacity:.55}
-@media(max-width:720px){.nm,.sec-col{display:none}}
+.hdlink{color:var(--green);font-size:11px;font-weight:600;letter-spacing:.04em;border:1px solid var(--hair2);padding:4px 10px;border-radius:6px}
+.hdlink:hover{border-color:var(--green)}
+/* Frozen identity columns (1-7: #, Ticker, Name, Ctry, Type, Sector, Price) so the wide
+   long-horizon K/G block scrolls left-right UNDER them. Fixed widths make the sticky
+   left-offsets deterministic. */
+thead th{z-index:5}
+.wrap thead th:nth-child(-n+7),.wrap tbody td:nth-child(-n+7){position:sticky}
+.wrap tbody td:nth-child(-n+7){z-index:3;background:var(--ink)}
+.wrap tbody tr:hover td:nth-child(-n+7){background:var(--card)}
+.wrap thead th:nth-child(-n+7){z-index:6}
+.wrap :is(th,td):nth-child(1){left:0;width:40px;min-width:40px;max-width:40px}
+.wrap :is(th,td):nth-child(2){left:40px;width:66px;min-width:66px;max-width:66px}
+.wrap :is(th,td):nth-child(3){left:106px;width:150px;min-width:150px;max-width:150px}
+.wrap :is(th,td):nth-child(4){left:256px;width:46px;min-width:46px;max-width:46px}
+.wrap :is(th,td):nth-child(5){left:302px;width:92px;min-width:92px;max-width:92px}
+.wrap :is(th,td):nth-child(6){left:394px;width:104px;min-width:104px;max-width:104px}
+.wrap :is(th,td):nth-child(7){left:498px;width:74px;min-width:74px;max-width:74px;box-shadow:inset -1px 0 0 var(--hair2)}
+@media(max-width:720px){.nm,.sec-col{display:none}.wrap :is(th,td):nth-child(-n+7){position:static}}
 </style>
 </head>
 <body>
-<header>
-  <div class="title">MOMENTUM<span class="dot">.</span>BOARD</div>
-  <div class="sub">Every stock ranked by 12-1 momentum, gated on trend quality. <span id="meta"></span></div>
+<header style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px">
+  <div>
+    <div class="title">MOMENTUM<span class="dot">.</span>BOARD</div>
+    <div class="sub">Every stock ranked by 12-1 momentum, gated on trend quality. <span id="meta"></span></div>
+  </div>
+  <a class="hdlink" href="compounders.html">Compounders &nearr;</a>
 </header>
 
 <div class="presets" id="presets"></div>

@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>Compounders · long-horizon trend</title>
+<style>
+:root{
+  --bg:#f5f5f0; --panel:#ffffff; --card:#fbfbf8; --hair:#e4e4dc; --hair2:#d2d2c8;
+  --ink:#1b1e22; --mute:#6c727a; --dim:#9aa0a7;
+  --green:#0a8f4f; --greenbg:#0a8f4f; --pos:#0a8f4f; --neg:#b23b2e;
+  --mono:"SF Mono",ui-monospace,"JetBrains Mono",Menlo,Consolas,monospace;
+  --sans:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);-webkit-font-smoothing:antialiased}
+a{color:inherit;text-decoration:none}
+header{padding:22px 26px 12px;border-bottom:1px solid var(--hair);background:var(--panel);display:flex;justify-content:space-between;align-items:flex-start;gap:16px}
+.title{font-size:19px;font-weight:700;letter-spacing:.14em}
+.title .dot{color:var(--green)}
+.sub{color:var(--mute);font-size:12px;margin-top:5px;letter-spacing:.02em;max-width:760px;line-height:1.5}
+.sub b{color:var(--ink);font-weight:600}
+.hdlink{color:var(--green);font-size:11px;font-weight:600;letter-spacing:.04em;border:1px solid var(--hair2);padding:5px 11px;border-radius:6px;white-space:nowrap}
+.hdlink:hover{border-color:var(--green)}
+.tabs{display:flex;gap:8px;padding:14px 26px 0;align-items:center;flex-wrap:wrap}
+.tab{background:var(--card);border:1px solid var(--hair2);color:var(--mute);font-family:var(--sans);font-size:13px;font-weight:600;letter-spacing:.02em;padding:8px 16px;border-radius:7px;cursor:pointer}
+.tab:hover{color:var(--ink);border-color:var(--mute)}
+.tab.on{color:#fff;background:var(--green);border-color:var(--green)}
+.tabdesc{padding:10px 26px 0;color:var(--mute);font-size:11.5px;max-width:1100px;line-height:1.55;min-height:16px}
+.tabdesc b{color:var(--ink)}
+.controls{display:flex;flex-wrap:wrap;gap:10px 14px;align-items:center;padding:14px 26px;border-bottom:1px solid var(--hair)}
+.controls label{font-size:10.5px;color:var(--mute);text-transform:uppercase;letter-spacing:.1em;display:flex;flex-direction:column;gap:5px}
+input[type=text],select,input[type=number]{background:var(--panel);border:1px solid var(--hair2);color:var(--ink);font-family:var(--sans);font-size:13px;padding:7px 9px;border-radius:5px;outline:none}
+input[type=text]{min-width:180px}
+input:focus,select:focus{border-color:var(--green)}
+.chk{flex-direction:row!important;align-items:center;gap:7px;cursor:pointer;padding-top:14px}
+.chk input{accent-color:var(--green);width:15px;height:15px}
+.wrap{overflow:auto;max-height:calc(100vh - 210px)}
+table{border-collapse:collapse;width:100%;font-size:12.5px}
+thead th{position:sticky;top:0;background:var(--panel);color:var(--mute);font-weight:600;text-transform:uppercase;letter-spacing:.05em;font-size:10px;
+  padding:11px 10px;text-align:right;white-space:nowrap;cursor:pointer;user-select:none;border-bottom:1px solid var(--hair2);z-index:5}
+thead th.l{text-align:left}
+thead th:hover{color:var(--ink)}
+th .ar{color:var(--green);font-size:9px;margin-left:3px}
+tbody td{padding:8px 10px;text-align:right;border-bottom:1px solid var(--hair);white-space:nowrap;font-variant-numeric:tabular-nums;font-family:var(--mono)}
+tbody td.l{text-align:left;font-family:var(--sans)}
+tbody tr:hover{background:#eef0ea}
+.tk{font-family:var(--mono);font-weight:700}
+.tk:hover{color:var(--green)}
+.nm{color:var(--mute);font-size:11.5px;overflow:hidden;text-overflow:ellipsis}
+.rk{color:var(--dim)}
+.pos{color:var(--pos)} .neg{color:var(--neg)} .muted{color:var(--dim)}
+.kbar{display:inline-block;height:3px;background:var(--green);vertical-align:middle;margin-left:6px;border-radius:2px;opacity:.5}
+.ctry{font-family:var(--mono);font-size:11px;color:var(--mute)}
+/* Frozen identity columns (1-3: #, Ticker, Name) so metric windows scroll under them */
+.wrap thead th:nth-child(-n+3),.wrap tbody td:nth-child(-n+3){position:sticky}
+.wrap tbody td:nth-child(-n+3){z-index:3;background:var(--panel)}
+.wrap tbody tr:hover td:nth-child(-n+3){background:#eef0ea}
+.wrap thead th:nth-child(-n+3){z-index:6}
+.wrap :is(th,td):nth-child(1){left:0;width:40px;min-width:40px;max-width:40px}
+.wrap :is(th,td):nth-child(2){left:40px;width:66px;min-width:66px;max-width:66px}
+.wrap :is(th,td):nth-child(3){left:106px;width:170px;min-width:170px;max-width:170px;box-shadow:inset -1px 0 0 var(--hair2)}
+footer{padding:16px 26px 40px;color:var(--dim);font-size:11px;line-height:1.7;border-top:1px solid var(--hair);max-width:1100px}
+footer b{color:var(--mute)}
+.count{color:var(--green);font-family:var(--mono)}
+@media(max-width:720px){.wrap :is(th,td):nth-child(-n+3){position:static}}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <div class="title">COMPOUNDERS<span class="dot">.</span></div>
+    <div class="sub">The longest, steadiest compounders. Same universe as the board, viewed over multi-year windows. <span id="meta"></span></div>
+  </div>
+  <a class="hdlink" href="index.html">&nwarr; Momentum Board</a>
+</header>
+
+<div class="tabs" id="tabs"></div>
+<div class="tabdesc" id="tabdesc"></div>
+
+<div class="controls">
+  <label>Search<input type="text" id="q" placeholder="ticker or name"/></label>
+  <label>Country<select id="fCtry"></select></label>
+  <label>Sector<select id="fSec"></select></label>
+  <label>Min history (yrs)<input type="number" id="fHy" value="" placeholder="any" style="width:96px"/></label>
+  <label>Min mkt-cap $m<input type="number" id="fMc" value="" placeholder="any" step="100" style="width:96px"/></label>
+  <label class="chk"><input type="checkbox" id="fLiq" checked/> Liquid &gt;$5m/day</label>
+</div>
+
+<div class="wrap">
+<table>
+<thead><tr id="hr"></tr></thead>
+<tbody id="tb"></tbody>
+</table>
+</div>
+
+<footer id="legend"></footer>
+
+<script>
+const WINS=[10,15,20,25,30,50];
+const TABS=[
+ {id:'k',  label:'Raw K',          desc:'<b>Raw K-ratio</b> over each window (slope &divide; standard error of log-price vs time): the steadiness of the long-run climb. Bigger = steadier. CAVEAT: K is a t-statistic, so it grows with the length of the window. A 50-year K is mechanically larger than a 10-year K for the same smoothness. <b>Compare DOWN a column, not across.</b>'},
+ {id:'avgk',label:'Average K (K&divide;yrs)',desc:'<b>K divided by the number of years</b> in the window. This cancels out the t-statistic’s growth-with-length, so the columns ARE comparable across horizons: a flat row = equally steady at every horizon; a falling row = the trend was rougher in the older (longer) windows. The honest cross-horizon read.'},
+ {id:'g',  label:'Growth (G %/yr)', desc:'<b>Annualised trend growth</b> (%/yr) from the same regression: how FAST it compounded over each window, regardless of smoothness. Pair with the K tabs: a steady AND fast name (high K + high G) is the true compounder.'},
+];
+let DATA=[], metric='k', sortKind='win', sortField='t', sortWin=20, asc=false;
+
+const num=v=>v===null||v===undefined||v===''?null:+v;
+const fmt=(v,d=1)=>v===null||v===undefined?'<span class="muted">&middot;</span>':(+v).toLocaleString('en-US',{minimumFractionDigits:d,maximumFractionDigits:d});
+
+function cellVal(r,w){
+  if(metric==='k')   return r['k'+w];
+  if(metric==='g')   return r['g'+w];
+  const k=r['k'+w];  return k===null||k===undefined?null:Math.round(k/w*100)/100; // avg K = K / years
+}
+function idCols(){return [
+  {f:'rank',t:'#',cls:'l rk'},
+  {f:'t',   t:'Ticker',cls:'l'},
+  {f:'name',t:'Name',cls:'l nm'},
+  {f:'ctry',t:'Ctry',cls:'l'},
+  {f:'sec', t:'Sector',cls:'l nm'},
+  {f:'px',  t:'Price'},
+  {f:'hy',  t:'Hist y'},
+];}
+
+function buildTabs(){
+  document.getElementById('tabs').innerHTML=TABS.map(t=>`<button class="tab" data-id="${t.id}">${t.label}</button>`).join('');
+  document.querySelectorAll('.tab').forEach(b=>b.onclick=()=>setMetric(b.dataset.id));
+}
+function setMetric(m){
+  metric=m; sortKind='win'; sortWin=20; asc=false;
+  document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('on',b.dataset.id===m));
+  document.getElementById('tabdesc').innerHTML=TABS.find(t=>t.id===m).desc;
+  buildHead(); render();
+}
+function buildHead(){
+  const id=idCols().map(c=>`<th class="${c.cls}" data-kind="field" data-f="${c.f}">${c.t}<span class="ar"></span></th>`).join('');
+  const prefix=metric==='g'?'G ':(metric==='avgk'?'K/yr ':'K ');
+  const suffix=metric==='g'?' %':'';
+  const wins=WINS.map(w=>`<th data-kind="win" data-w="${w}">${prefix}${w}y${suffix}<span class="ar"></span></th>`).join('');
+  document.getElementById('hr').innerHTML=id+wins;
+  document.querySelectorAll('#hr th').forEach(th=>th.onclick=()=>{
+    const kind=th.dataset.kind;
+    if(kind==='field'){ const f=th.dataset.f; if(f==='rank')return;
+      if(sortKind==='field'&&sortField===f)asc=!asc; else{sortKind='field';sortField=f;asc=(f==='t'||f==='name');} }
+    else{ const w=+th.dataset.w; if(sortKind==='win'&&sortWin===w)asc=!asc; else{sortKind='win';sortWin=w;asc=false;} }
+    render();
+  });
+}
+function passes(r){
+  const q=document.getElementById('q').value.trim().toLowerCase();
+  if(q && !((r.t||'').toLowerCase().includes(q)||(r.name||'').toLowerCase().includes(q)))return false;
+  const c=document.getElementById('fCtry').value; if(c && r.ctry!==c)return false;
+  const sc=document.getElementById('fSec').value; if(sc && r.sec!==sc)return false;
+  const hy=num(document.getElementById('fHy').value); if(hy!==null && (r.hy===null||r.hy<hy))return false;
+  const mc=num(document.getElementById('fMc').value); if(mc!==null && (r.mc===null||r.mc<mc))return false;
+  if(document.getElementById('fLiq').checked && (r.adv===null||r.adv<5))return false;
+  return true;
+}
+function render(){
+  let view=DATA.filter(passes);
+  view.sort((a,b)=>{
+    let x,y;
+    if(sortKind==='field'){x=a[sortField];y=b[sortField];}
+    else{x=cellVal(a,sortWin);y=cellVal(b,sortWin);}
+    if(typeof x==='string')return asc?(''+x).localeCompare(y):(''+y).localeCompare(x);
+    if(x===null||x===undefined)x=-1e18; if(y===null||y===undefined)y=-1e18;
+    return asc?x-y:y-x;
+  });
+  // per-column max (positive) for the in-cell bar, scaled to the current view
+  const cmax={}; WINS.forEach(w=>{cmax[w]=Math.max(1,...view.map(r=>{const v=cellVal(r,w);return v&&v>0?v:0;}));});
+  // sort arrows
+  document.querySelectorAll('#hr th').forEach(th=>{
+    const ar=th.querySelector('.ar'); if(!ar)return;
+    const isF=th.dataset.kind==='field'&&sortKind==='field'&&th.dataset.f===sortField;
+    const isW=th.dataset.kind==='win'&&sortKind==='win'&&+th.dataset.w===sortWin;
+    ar.textContent=(isF||isW)?(asc?'▲':'▼'):'';
+  });
+  const tb=document.getElementById('tb');
+  tb.innerHTML=view.map((r,i)=>{
+    const cs={USD:'$',GBp:'p',EUR:'€',CAD:'C$'}[r.ccy]||'';
+    let cells=''
+      +`<td class="l rk">${i+1}</td>`
+      +`<td class="l"><a class="tk" target="_blank" href="https://finance.yahoo.com/quote/${encodeURIComponent(r.t)}">${r.t.replace('.L','')}</a></td>`
+      +`<td class="l nm">${r.name||''}</td>`
+      +`<td class="l"><span class="ctry">${r.ctry}</span></td>`
+      +`<td class="l nm">${r.sec||''}</td>`
+      +`<td>${fmt(r.px,2)}<span class="muted" style="font-size:9px"> ${cs}</span></td>`
+      +`<td>${fmt(r.hy,1)}</td>`;
+    cells+=WINS.map(w=>{
+      const v=cellVal(r,w);
+      if(v===null||v===undefined)return `<td><span class="muted">&middot;</span></td>`;
+      const cls=v<0?'neg':'';
+      const bar=v>0?`<span class="kbar" style="width:${Math.round(v/cmax[w]*34)}px"></span>`:'';
+      const d=metric==='avgk'?2:1;
+      return `<td class="${cls}">${fmt(v,d)}${bar}</td>`;
+    }).join('');
+    return `<tr>${cells}</tr>`;
+  }).join('');
+  document.getElementById('meta').innerHTML=`<b>${view.length.toLocaleString()}</b> names`;
+}
+function fillSelect(id,vals){
+  const s=document.getElementById(id);
+  s.innerHTML='<option value="">All</option>'+[...new Set(vals.filter(Boolean))].sort().map(v=>`<option>${v}</option>`).join('');
+}
+document.getElementById('legend').innerHTML=
+ '<b>Reading it.</b> Three views of the same long-run trend, one tab each. <b>Raw K</b> = K-ratio per window (steadiness); grows with window length, so compare down a column not across. <b>Average K</b> = that K divided by the window’s years, which removes the length effect so horizons are directly comparable. <b>Growth G</b> = annualised trend growth (%/yr) from the same fit (size of the climb). '
+ +'<br><br><b>Strict history:</b> a name only carries a value for a window if it has the FULL window of data (Visa, listed 2008, is blank at 20y+, present at 10/15y). So every column is a true like-for-like, and the long windows are heavily survivorship-biased (only survivors have 30-50y of history): coverage falls from ~84% at 10y to ~8% at 50y. The in-cell bar scales to the visible column. Click any header to sort. Snapshot data, not investment advice.';
+
+fetch('data.json').then(r=>r.json()).then(d=>{
+  DATA=d.rows;
+  document.querySelector('.sub').insertAdjacentHTML('beforeend',` &nbsp;&middot;&nbsp; generated <b>${d.generated}</b>`);
+  fillSelect('fCtry',DATA.map(r=>r.ctry));
+  fillSelect('fSec',DATA.map(r=>r.sec));
+  ['q','fHy','fMc'].forEach(id=>document.getElementById(id).addEventListener('input',render));
+  ['fCtry','fSec','fLiq'].forEach(id=>document.getElementById(id).addEventListener('change',render));
+  buildTabs();
+  setMetric('k');
+}).catch(e=>{document.getElementById('tb').innerHTML=`<tr><td class="l" style="padding:30px;color:var(--neg)">Failed to load data.json: ${e}</td></tr>`;});
+</script>
+</body>
+</html>
