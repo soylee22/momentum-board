@@ -50,9 +50,10 @@ tbody tr:hover{background:#eef0ea}
 .nm{color:var(--mute);font-size:11.5px;overflow:hidden;text-overflow:ellipsis}
 .rk{color:var(--dim)}
 .pos{color:var(--pos)} .neg{color:var(--neg)} .muted{color:var(--dim)}
+.sumcol{font-weight:700;color:var(--ink)}
 .kbar{display:inline-block;height:3px;background:var(--green);vertical-align:middle;margin-left:6px;border-radius:2px;opacity:.5}
 .ctry{font-family:var(--mono);font-size:11px;color:var(--mute)}
-/* Frozen identity columns (1-3: #, Ticker, Name) so metric windows scroll under them */
+/* Frozen identity columns (1-3: #, Ticker, Name) so metric columns scroll under them */
 .wrap thead th:nth-child(-n+3),.wrap tbody td:nth-child(-n+3){position:sticky}
 .wrap tbody td:nth-child(-n+3){z-index:3;background:var(--panel)}
 .wrap tbody tr:hover td:nth-child(-n+3){background:#eef0ea}
@@ -99,71 +100,90 @@ footer b{color:var(--mute)}
 
 <script>
 const WINS=[10,15,20,25,30,50];
+const GCAP=30, KCAP=25;   // absolute yardsticks for the Compounder score: 30%/yr growth, 25 avg-K
 const TABS=[
- {id:'k',  label:'Raw K',          desc:'<b>Raw K-ratio</b> over each window (slope &divide; standard error of log-price vs time): the steadiness of the long-run climb. Bigger = steadier. CAVEAT: K is a t-statistic, so it grows with the length of the window. A 50-year K is mechanically larger than a 10-year K for the same smoothness. <b>Compare DOWN a column, not across.</b>'},
- {id:'avgk',label:'Average K (K&divide;yrs)',desc:'<b>K divided by the number of years</b> in the window. This cancels out the t-statistic’s growth-with-length, so the columns ARE comparable across horizons: a flat row = equally steady at every horizon; a falling row = the trend was rougher in the older (longer) windows. The honest cross-horizon read.'},
- {id:'g',  label:'Growth (G %/yr)', desc:'<b>Annualised trend growth</b> (%/yr) from the same regression: how FAST it compounded over each window, regardless of smoothness. Pair with the K tabs: a steady AND fast name (high K + high G) is the true compounder.'},
- {id:'score',label:'Compounder score', desc:'<b>0-100 blend of growth AND steadiness</b>, the single "best compounder" column. Each name is percentile-ranked on Growth (G) and on Average K (steadiness) over the window, then combined as a GEOMETRIC mean, so a name must score on BOTH (a dud on either tanks it, no fast-but-jagged or steady-but-slow gaming it). Use the <b>Growth weight</b> control to tilt: 50 = balanced, 100 = pure growth, 0 = pure steadiness. Scored relative to the names currently shown, so it re-ranks as you filter.'},
+ {id:'k',   label:'Raw K',            desc:'<b>Raw K-ratio</b> per window (slope &divide; standard error of log-price vs time): steadiness of the climb. Bigger = steadier. CAVEAT: K is a t-statistic, so it grows with window length. A 50y K is mechanically larger than a 10y K for the same smoothness. <b>Compare DOWN a column, not across.</b>'},
+ {id:'avgk',label:'Average K (K&divide;yrs)',desc:'<b>K divided by the window’s years.</b> Cancels the length effect, so columns ARE comparable across horizons: a flat row = equally steady at every horizon; a falling row = rougher in the older (longer) windows.'},
+ {id:'g',   label:'Growth (G %/yr)',  desc:'<b>Annualised trend growth</b> (%/yr) from the same regression: how FAST it compounded, regardless of smoothness.'},
+ {id:'score',label:'Compounder score', desc:'<b>0-100 ABSOLUTE blend of growth + steadiness.</b> Growth is scored against a fixed 30%/yr yardstick and steadiness against a fixed avg-K of 25 (not against the other names on screen), so the score is stable and does NOT change as you filter. The two are combined as a GEOMETRIC mean, so a name must score on BOTH. <b>Growth weight %</b> tilts it (50 balanced / 100 pure growth / 0 pure steadiness). A ratio (growth&divide;steadiness) would be wrong, it rewards jaggedness; this blends.'},
+ {id:'cons',label:'Consistency (across horizons)', desc:'<b>Is it steady-and-high at EVERY horizon, not just one?</b> Shows the avg-K profile (10-50y) plus <b>Mean</b> = average avg-K across the windows the name has, and <b>Consistency = Mean − SD</b> (high mean AND low scatter across horizons scores high). Needs &ge;3 windows (&ge;20y). KO scores below JNJ/PG here: higher near-term K but it fades at 30-50y, while they stay flat. Set a Min-history filter for a clean like-for-like.'},
 ];
-let DATA=[], metric='k', sortKind='win', sortField='t', sortWin=20, asc=false, SCORE={};
+let DATA=[], metric='k', sortKey='c20', asc=false, WG=0.5, curCols=[];
+const IDF=['rank','t','name','ctry','sec','px','hy'];
 
 const num=v=>v===null||v===undefined||v===''?null:+v;
+const r1=v=>Math.round(v*10)/10, r2=v=>Math.round(v*100)/100;
+const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
 const fmt=(v,d=1)=>v===null||v===undefined?'<span class="muted">&middot;</span>':(+v).toLocaleString('en-US',{minimumFractionDigits:d,maximumFractionDigits:d});
 
-function avgK(r,w){const k=r['k'+w];return k===null||k===undefined?null:k/w;} // K per year
-function cellVal(r,w){
-  if(metric==='k')   return r['k'+w];
-  if(metric==='g')   return r['g'+w];
-  if(metric==='avgk'){const v=avgK(r,w);return v===null?null:Math.round(v*100)/100;}
-  const m=SCORE[w]; return m&&(r.t in m)?m[r.t]:null; // compounder score (0-100), precomputed per view
+function avgK(r,w){const k=r['k'+w];return k===null||k===undefined?null:k/w;}            // K per year
+function score(r,w){                                                                     // absolute 0-100
+  const g=r['g'+w], k=r['k'+w];
+  if(g===null||g===undefined||k===null||k===undefined)return null;
+  const ng=clamp(g/GCAP,0,1), nk=clamp((k/w)/KCAP,0,1);
+  return Math.round(Math.pow(ng,WG)*Math.pow(nk,1-WG)*100);
 }
-// percentile-blend growth + steadiness into a 0-100 score per window, over the filtered view
-function buildScore(view){
-  SCORE={};
-  const wG=Math.min(1,Math.max(0,(num(document.getElementById('fW').value)??50)/100));
-  WINS.forEach(w=>{
-    const arr=view.filter(r=>r['g'+w]!=null&&r['k'+w]!=null).map(r=>({t:r.t,g:r['g'+w],a:avgK(r,w)}));
-    const n=arr.length, m={};
-    if(n){
-      [...arr].sort((x,y)=>x.g-y.g).forEach((o,i)=>o.pg=n>1?i/(n-1):1);
-      [...arr].sort((x,y)=>x.a-y.a).forEach((o,i)=>o.pa=n>1?i/(n-1):1);
-      arr.forEach(o=>{m[o.t]=Math.round(Math.pow(o.pg,wG)*Math.pow(o.pa,1-wG)*100);});
-    }
-    SCORE[w]=m;
-  });
+function consStats(r){
+  const xs=WINS.map(w=>avgK(r,w)).filter(v=>v!==null);
+  if(xs.length<3)return {mean:null,cons:null,n:xs.length};
+  const mean=xs.reduce((a,b)=>a+b,0)/xs.length;
+  const sd=Math.sqrt(xs.reduce((a,b)=>a+(b-mean)**2,0)/xs.length);
+  return {mean:r1(mean), cons:r1(mean-sd), n:xs.length};
 }
-function idCols(){return [
-  {f:'rank',t:'#',cls:'l rk'},
-  {f:'t',   t:'Ticker',cls:'l'},
-  {f:'name',t:'Name',cls:'l nm'},
-  {f:'ctry',t:'Ctry',cls:'l'},
-  {f:'sec', t:'Sector',cls:'l nm'},
-  {f:'px',  t:'Price'},
-  {f:'hy',  t:'Hist y'},
-];}
+// the metric columns for the active tab: each {key,label,val(r),d}
+function metricCols(){
+  if(metric==='cons'){
+    const prof=WINS.map(w=>({key:'c'+w,label:'K/yr '+w+'y',val:r=>{const v=avgK(r,w);return v===null?null:r2(v);},d:2}));
+    return prof.concat([
+      {key:'mean',label:'Mean K/yr',val:r=>consStats(r).mean,d:1,sum:1},
+      {key:'cons',label:'Consistency',val:r=>consStats(r).cons,d:1,sum:1},
+    ]);
+  }
+  const pre=metric==='g'?'G ':metric==='avgk'?'K/yr ':metric==='score'?'Score ':'K ';
+  const suf=metric==='g'?' %':'';
+  const d=metric==='avgk'?2:metric==='score'?0:1;
+  return WINS.map(w=>({key:'c'+w,label:pre+w+'y'+suf,d,val:r=>{
+    if(metric==='k')return r['k'+w];
+    if(metric==='g')return r['g'+w];
+    if(metric==='avgk'){const v=avgK(r,w);return v===null?null:r2(v);}
+    return score(r,w);
+  }}));
+}
+function valueFor(r,key){
+  if(IDF.includes(key))return r[key];
+  const c=curCols.find(c=>c.key===key);
+  return c?c.val(r):null;
+}
 
 function buildTabs(){
   document.getElementById('tabs').innerHTML=TABS.map(t=>`<button class="tab" data-id="${t.id}">${t.label}</button>`).join('');
   document.querySelectorAll('.tab').forEach(b=>b.onclick=()=>setMetric(b.dataset.id));
 }
 function setMetric(m){
-  metric=m; sortKind='win'; sortWin=20; asc=false;
+  metric=m; asc=false;
+  sortKey = m==='cons' ? 'cons' : 'c20';   // default: 20y window, or the consistency score
   document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('on',b.dataset.id===m));
   document.getElementById('tabdesc').innerHTML=TABS.find(t=>t.id===m).desc;
-  buildHead(); render();
+  draw();
+}
+function draw(){           // tab/column change: rebuild header THEN body
+  curCols=metricCols();
+  buildHead();
+  paint();
 }
 function buildHead(){
-  const id=idCols().map(c=>`<th class="${c.cls}" data-kind="field" data-f="${c.f}">${c.t}<span class="ar"></span></th>`).join('');
-  const prefix=metric==='g'?'G ':metric==='avgk'?'K/yr ':metric==='score'?'Score ':'K ';
-  const suffix=metric==='g'?' %':'';
-  const wins=WINS.map(w=>`<th data-kind="win" data-w="${w}">${prefix}${w}y${suffix}<span class="ar"></span></th>`).join('');
-  document.getElementById('hr').innerHTML=id+wins;
+  const id=[['rank','#','l rk'],['t','Ticker','l'],['name','Name','l nm']]
+    .map(([k,t,c])=>`<th class="${c}" data-key="${k}">${t}<span class="ar"></span></th>`).join('');
+  const extra=`<th class="l" data-key="hy">Hist y<span class="ar"></span></th>`
+    +`<th class="l nm" data-key="ctry">Ctry<span class="ar"></span></th>`
+    +`<th class="l nm" data-key="sec">Sector<span class="ar"></span></th>`
+    +`<th data-key="px">Price<span class="ar"></span></th>`;
+  const mc=curCols.map(c=>`<th data-key="${c.key}">${c.label}<span class="ar"></span></th>`).join('');
+  document.getElementById('hr').innerHTML=id+extra+mc;
   document.querySelectorAll('#hr th').forEach(th=>th.onclick=()=>{
-    const kind=th.dataset.kind;
-    if(kind==='field'){ const f=th.dataset.f; if(f==='rank')return;
-      if(sortKind==='field'&&sortField===f)asc=!asc; else{sortKind='field';sortField=f;asc=(f==='t'||f==='name');} }
-    else{ const w=+th.dataset.w; if(sortKind==='win'&&sortWin===w)asc=!asc; else{sortKind='win';sortWin=w;asc=false;} }
-    render();
+    const k=th.dataset.key; if(k==='rank')return;
+    if(sortKey===k)asc=!asc; else{sortKey=k;asc=(k==='t'||k==='name'||k==='ctry'||k==='sec');}
+    paint();
   });
 }
 function passes(r){
@@ -176,26 +196,17 @@ function passes(r){
   if(document.getElementById('fLiq').checked && (r.adv===null||r.adv<5))return false;
   return true;
 }
-function render(){
+function paint(){          // filter/sort/weight change: recompute values + body, header unchanged
+  WG=clamp((num(document.getElementById('fW').value)??50)/100,0,1);
   let view=DATA.filter(passes);
-  if(metric==='score')buildScore(view); // must precede sort: cellVal('score') reads SCORE
   view.sort((a,b)=>{
-    let x,y;
-    if(sortKind==='field'){x=a[sortField];y=b[sortField];}
-    else{x=cellVal(a,sortWin);y=cellVal(b,sortWin);}
+    let x=valueFor(a,sortKey), y=valueFor(b,sortKey);
     if(typeof x==='string')return asc?(''+x).localeCompare(y):(''+y).localeCompare(x);
     if(x===null||x===undefined)x=-1e18; if(y===null||y===undefined)y=-1e18;
     return asc?x-y:y-x;
   });
-  // per-column max (positive) for the in-cell bar, scaled to the current view
-  const cmax={}; WINS.forEach(w=>{cmax[w]=Math.max(1,...view.map(r=>{const v=cellVal(r,w);return v&&v>0?v:0;}));});
-  // sort arrows
-  document.querySelectorAll('#hr th').forEach(th=>{
-    const ar=th.querySelector('.ar'); if(!ar)return;
-    const isF=th.dataset.kind==='field'&&sortKind==='field'&&th.dataset.f===sortField;
-    const isW=th.dataset.kind==='win'&&sortKind==='win'&&+th.dataset.w===sortWin;
-    ar.textContent=(isF||isW)?(asc?'▲':'▼'):'';
-  });
+  const cmax={}; curCols.forEach(c=>{cmax[c.key]=Math.max(1,...view.map(r=>{const v=c.val(r);return v&&v>0?v:0;}));});
+  document.querySelectorAll('#hr th').forEach(th=>{const ar=th.querySelector('.ar');if(ar)ar.textContent=th.dataset.key===sortKey?(asc?'▲':'▼'):'';});
   const tb=document.getElementById('tb');
   tb.innerHTML=view.map((r,i)=>{
     const cs={USD:'$',GBp:'p',EUR:'€',CAD:'C$'}[r.ccy]||'';
@@ -203,17 +214,16 @@ function render(){
       +`<td class="l rk">${i+1}</td>`
       +`<td class="l"><a class="tk" target="_blank" href="https://finance.yahoo.com/quote/${encodeURIComponent(r.t)}">${r.t.replace('.L','')}</a></td>`
       +`<td class="l nm">${r.name||''}</td>`
+      +`<td>${fmt(r.hy,1)}</td>`
       +`<td class="l"><span class="ctry">${r.ctry}</span></td>`
       +`<td class="l nm">${r.sec||''}</td>`
-      +`<td>${fmt(r.px,2)}<span class="muted" style="font-size:9px"> ${cs}</span></td>`
-      +`<td>${fmt(r.hy,1)}</td>`;
-    cells+=WINS.map(w=>{
-      const v=cellVal(r,w);
+      +`<td>${fmt(r.px,2)}<span class="muted" style="font-size:9px"> ${cs}</span></td>`;
+    cells+=curCols.map(c=>{
+      const v=c.val(r);
       if(v===null||v===undefined)return `<td><span class="muted">&middot;</span></td>`;
-      const cls=v<0?'neg':'';
-      const bar=v>0?`<span class="kbar" style="width:${Math.round(v/cmax[w]*34)}px"></span>`:'';
-      const d=metric==='avgk'?2:(metric==='score'?0:1);
-      return `<td class="${cls}">${fmt(v,d)}${bar}</td>`;
+      const cls=(v<0?'neg ':'')+(c.sum?'sumcol':'');
+      const bar=v>0?`<span class="kbar" style="width:${Math.round(v/cmax[c.key]*30)}px"></span>`:'';
+      return `<td class="${cls}">${fmt(v,c.d)}${bar}</td>`;
     }).join('');
     return `<tr>${cells}</tr>`;
   }).join('');
@@ -224,18 +234,20 @@ function fillSelect(id,vals){
   s.innerHTML='<option value="">All</option>'+[...new Set(vals.filter(Boolean))].sort().map(v=>`<option>${v}</option>`).join('');
 }
 document.getElementById('legend').innerHTML=
- '<b>Reading it.</b> Four views of the same long-run trend, one tab each. <b>Raw K</b> = K-ratio per window (steadiness); grows with window length, so compare down a column not across. <b>Average K</b> = that K divided by the window’s years, which removes the length effect so horizons are directly comparable. <b>Growth G</b> = annualised trend growth (%/yr) from the same fit (size of the climb). <b>Compounder score</b> = a 0-100 geometric blend of each name’s growth-percentile and steadiness-percentile within the current view (Growth weight % tilts it); a name must rank well on BOTH to score high, which is the definition of a compounder. Note: dividing growth BY steadiness would be wrong (it rewards jagged names), so the score multiplies/blends, it does not divide. '
- +'<br><br><b>Strict history:</b> a name only carries a value for a window if it has the FULL window of data (Visa, listed 2008, is blank at 20y+, present at 10/15y). So every column is a true like-for-like, and the long windows are heavily survivorship-biased (only survivors have 30-50y of history): coverage falls from ~84% at 10y to ~8% at 50y. The in-cell bar scales to the visible column. Click any header to sort. Snapshot data, not investment advice.';
+ '<b>Reading it.</b> Five lenses on the same long-run trend, one tab each. <b>Raw K</b> = K-ratio per window (grows with window length, compare down a column not across). <b>Average K</b> = K &divide; window-years (length effect removed, comparable across horizons). <b>Growth G</b> = annualised trend growth %/yr (size of the climb). '
+ +'<b>Compounder score</b> = an ABSOLUTE 0-100 blend: growth scored against a fixed 30%/yr yardstick, steadiness against a fixed avg-K of 25, combined as a geometric mean (so both must be present), tilted by Growth weight %. Absolute means a name’s score is fixed, it does NOT shift as you filter (unlike a percentile rank). '
+ +'<b>Consistency</b> = Mean and Mean−SD of avg-K across the horizons a name has (&ge;3 windows): rewards being steady-and-high at EVERY horizon, not just one. '
+ +'<br><br><b>Strict history:</b> a name only carries a value for a window if it has the FULL window (Visa, listed 2008, blank at 20y+, present at 10/15y). The long windows are heavily survivorship-biased: coverage falls from ~84% at 10y to ~8% at 50y. The in-cell bar scales to the visible column. Click any header to sort. Snapshot data, not investment advice.';
 
 fetch('data.json').then(r=>r.json()).then(d=>{
   DATA=d.rows;
   document.querySelector('.sub').insertAdjacentHTML('beforeend',` &nbsp;&middot;&nbsp; generated <b>${d.generated}</b>`);
   fillSelect('fCtry',DATA.map(r=>r.ctry));
   fillSelect('fSec',DATA.map(r=>r.sec));
-  ['q','fHy','fMc','fW'].forEach(id=>document.getElementById(id).addEventListener('input',render));
-  ['fCtry','fSec','fLiq'].forEach(id=>document.getElementById(id).addEventListener('change',render));
+  ['q','fHy','fMc','fW'].forEach(id=>document.getElementById(id).addEventListener('input',paint));
+  ['fCtry','fSec','fLiq'].forEach(id=>document.getElementById(id).addEventListener('change',paint));
   buildTabs();
-  setMetric('k');
+  setMetric('k');   // -> draw() builds header + body
 }).catch(e=>{document.getElementById('tb').innerHTML=`<tr><td class="l" style="padding:30px;color:var(--neg)">Failed to load data.json: ${e}</td></tr>`;});
 </script>
 </body>
