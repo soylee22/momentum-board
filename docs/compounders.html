@@ -90,7 +90,9 @@ footer b{color:var(--mute)}
   <label>Sector<select id="fSec"></select></label>
   <label>Min history (yrs)<input type="number" id="fHy" value="" placeholder="any" style="width:96px"/></label>
   <label>Min mkt-cap $m<input type="number" id="fMc" value="" placeholder="any" step="100" style="width:96px"/></label>
+  <label>Max mkt-cap $m<input type="number" id="fMcMax" value="" placeholder="any" step="100" style="width:96px"/></label>
   <label class="chk"><input type="checkbox" id="fLiq" checked/> Liquid &gt;$5m/day</label>
+  <label class="chk"><input type="checkbox" id="fDip"/> Quality dip only</label>
   <label id="wlab">Growth tilt
     <span class="seg" id="wbtns">
       <button type="button" class="segb" data-w="0.2">Steady</button>
@@ -123,7 +125,7 @@ const TABS=[
  {id:'cons',label:'Consistency (across horizons)', desc:'<b>Is it steady-and-high at EVERY horizon, not just one?</b> Shows the avg-K profile (10-50y) plus <b>Mean</b> and <b>Consistency = Mean − SD</b> of avg-K (high mean AND low scatter scores high). Use <b>Consistency over</b> to pick the lookback: <b>last 20y / last 30y</b> grade every name on the SAME ladder (fair like-for-like, so a 50y name is not punished for an ancient rough patch a 20y name simply lacks the data to show); <b>full history</b> judges each name on its own whole life (uneven, not cross-comparable). KO scores below JNJ/PG: higher near-term K but it fades at 30-50y while they stay flat.'},
 ];
 let DATA=[], metric='k', sortKey='c20', asc=false, WG=0.5, CONSSPAN='20', curCols=[];
-const IDF=['rank','t','name','ctry','sec','px','hy'];
+const IDF=['rank','t','name','ctry','sec','px','mc','hy'];
 
 const num=v=>v===null||v===undefined||v===''?null:+v;
 const r1=v=>Math.round(v*10)/10, r2=v=>Math.round(v*100)/100;
@@ -199,7 +201,8 @@ function buildHead(){
   const extra=`<th class="l" data-key="hy">Hist y<span class="ar"></span></th>`
     +`<th class="l nm" data-key="ctry">Ctry<span class="ar"></span></th>`
     +`<th class="l nm" data-key="sec">Sector<span class="ar"></span></th>`
-    +`<th data-key="px">Price<span class="ar"></span></th>`;
+    +`<th data-key="px">Price<span class="ar"></span></th>`
+    +`<th data-key="mc">Mkt $m<span class="ar"></span></th>`;
   const mc=curCols.map(c=>`<th data-key="${c.key}">${c.label}<span class="ar"></span></th>`).join('');
   document.getElementById('hr').innerHTML=id+extra+mc;
   document.querySelectorAll('#hr th').forEach(th=>th.onclick=()=>{
@@ -215,7 +218,10 @@ function passes(r){
   const sc=document.getElementById('fSec').value; if(sc && r.sec!==sc)return false;
   const hy=num(document.getElementById('fHy').value); if(hy!==null && (r.hy===null||r.hy<hy))return false;
   const mc=num(document.getElementById('fMc').value); if(mc!==null && (r.mc===null||r.mc<mc))return false;
+  const mcx=num(document.getElementById('fMcMax').value); if(mcx!==null && (r.mc===null||r.mc>mcx))return false;
   if(document.getElementById('fLiq').checked && (r.adv===null||r.adv<5))return false;
+  if(document.getElementById('fDip').checked &&    // quality dip: durable + uptrend intact + pulled back + turning up
+     !(r.k5!=null&&r.k5>=60&&r.vs200!=null&&r.vs200>0&&r.vs150!=null&&r.vs150>0&&r.vs50!=null&&r.vs50<0&&r.m1!=null&&r.m1>0))return false;
   if(metric==='cons' && consStats(r).cons===null)return false; // only names scorable at the chosen lookback
   return true;
 }
@@ -239,7 +245,8 @@ function paint(){          // filter/sort/weight change: recompute values + body
       +`<td>${fmt(r.hy,1)}</td>`
       +`<td class="l"><span class="ctry">${r.ctry}</span></td>`
       +`<td class="l nm">${r.sec||''}</td>`
-      +`<td>${fmt(r.px,2)}<span class="muted" style="font-size:9px"> ${cs}</span></td>`;
+      +`<td>${fmt(r.px,2)}<span class="muted" style="font-size:9px"> ${cs}</span></td>`
+      +`<td>${r.mc==null?'<span class="muted">&middot;</span>':(r.mc>=1000?(r.mc/1000).toFixed(1)+'k':fmt(r.mc,0))}</td>`;
     cells+=curCols.map(c=>{
       const v=c.val(r);
       if(v===null||v===undefined)return `<td><span class="muted">&middot;</span></td>`;
@@ -259,6 +266,7 @@ document.getElementById('legend').innerHTML=
  '<b>Reading it.</b> Five lenses on the same long-run trend, one tab each. <b>Raw K</b> = K-ratio per window (grows with window length, compare down a column not across). <b>Average K</b> = K &divide; window-years (length effect removed, comparable across horizons). <b>Growth G</b> = annualised trend growth %/yr (size of the climb). '
  +'<b>Compounder score</b> = an ABSOLUTE 0-100 blend: growth scored against a fixed 30%/yr yardstick, steadiness against a fixed avg-K of 25, combined as a geometric mean (so both must be present), tilted by Growth weight %. Absolute means a name’s score is fixed, it does NOT shift as you filter (unlike a percentile rank). '
  +'<b>Consistency</b> = Mean and Mean−SD of avg-K across the horizons a name has (&ge;3 windows): rewards being steady-and-high at EVERY horizon, not just one. '
+ +'<br><br><b>Market cap + size:</b> the <b>Mkt $m</b> column shows size; use Min and Max mkt-cap together to isolate a size band (e.g. small-caps only). Note K is size-biased, bigger companies score higher K almost mechanically (smoother revenue, lower vol; corr +0.43), so a high K on a SMALL company is rarer and harder-won. Judge K within a size band, not across. <b>Quality dip only</b> = durable smooth names (K5y&ge;60) in an intact uptrend (above 150/200-day) that have pulled back below the 50-day and turned up last month: buy quality into weakness. '
  +'<br><br><b>Strict history:</b> a name only carries a value for a window if it has the FULL window (Visa, listed 2008, blank at 20y+, present at 10/15y). The long windows are heavily survivorship-biased: coverage falls from ~84% at 10y to ~8% at 50y. The in-cell bar scales to the visible column. Click any header to sort. Snapshot data, not investment advice.';
 
 fetch('data.json').then(r=>r.json()).then(d=>{
@@ -266,8 +274,8 @@ fetch('data.json').then(r=>r.json()).then(d=>{
   document.querySelector('.sub').insertAdjacentHTML('beforeend',` &nbsp;&middot;&nbsp; generated <b>${d.generated}</b>`);
   fillSelect('fCtry',DATA.map(r=>r.ctry));
   fillSelect('fSec',DATA.map(r=>r.sec));
-  ['q','fHy','fMc'].forEach(id=>document.getElementById(id).addEventListener('input',paint));
-  ['fCtry','fSec','fLiq'].forEach(id=>document.getElementById(id).addEventListener('change',paint));
+  ['q','fHy','fMc','fMcMax'].forEach(id=>document.getElementById(id).addEventListener('input',paint));
+  ['fCtry','fSec','fLiq','fDip'].forEach(id=>document.getElementById(id).addEventListener('change',paint));
   // growth-tilt segmented buttons (score tab)
   document.querySelectorAll('#wbtns .segb').forEach(b=>b.onclick=()=>{
     WG=+b.dataset.w;
