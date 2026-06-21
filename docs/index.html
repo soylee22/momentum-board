@@ -43,6 +43,8 @@ tbody tr:hover{background:var(--card)}
 .nm{color:var(--mute);font-size:11.5px;max-width:230px;overflow:hidden;text-overflow:ellipsis}
 .rk{color:var(--dim)}
 .pos{color:var(--green)} .neg{color:var(--clay)} .neu{color:var(--mute)}
+.mv{font-family:var(--mono);font-size:11px;font-weight:600;white-space:nowrap}
+.mv.new{color:var(--amber);font-size:9px;letter-spacing:.04em}
 .k-cell{position:relative}
 .tag{font-size:9.5px;letter-spacing:.05em;padding:2px 6px;border-radius:3px;border:1px solid var(--hair2);color:var(--mute)}
 .ctry{font-family:var(--mono);font-size:11px;color:var(--mute)}
@@ -127,6 +129,7 @@ thead th{z-index:5}
 <script>
 const COLS=[
  {k:'rank',t:'#',cls:'l rk',n:1},
+ {k:'dr',t:'Δ',cls:'l'},
  {k:'t',t:'Ticker',cls:'l'},
  {k:'name',t:'Name',cls:'l nm'},
  {k:'ctry',t:'Ctry',cls:'l'},
@@ -159,7 +162,7 @@ const COLS=[
  {k:'g30',t:'G 30y %',n:1},
  {k:'g50',t:'G 50y %',n:1},
 ];
-let DATA=[], view=[], sortK='m12_1', sortAsc=false, kmax=1;
+let DATA=[], view=[], sortK='m12_1', sortAsc=false, kmax=1, BASE=null;
 
 const CAT={firing:['Firing','ct-firing'],resting:['Resting','ct-resting'],cyclical:['Cyclical','ct-cyclical'],none:['flat','ct-none']};
 function categorize(r){
@@ -239,6 +242,11 @@ function render(){
   const rows=view.map((r,i)=>{
     const cells=COLS.map(c=>{
       if(c.k==='rank')return `<td class="l rk">${i+1}</td>`;
+      if(c.k==='dr'){const d=r.dr;
+        if(d===null||d===undefined)return `<td class="l"><span class="mv new" title="new to the ranked board">NEW</span></td>`;
+        if(d===0)return `<td class="l"><span class="mv neu" title="no change vs ${BASE||'prev'}">·</span></td>`;
+        const up=d>0;
+        return `<td class="l"><span class="mv ${up?'pos':'neg'}" title="was #${r.pr} on ${BASE||'prev'} (12-1 rank)">${up?'▲':'▼'}${Math.abs(d)}</span></td>`;}
       if(c.k==='t')return `<td class="l"><a class="tk" target="_blank" href="https://finance.yahoo.com/quote/${encodeURIComponent(r.t)}">${r.t.replace('.L','')}</a></td>`;
       if(c.k==='name')return `<td class="l nm">${r.name||''}</td>`;
       if(c.k==='ctry')return `<td class="l"><span class="ctry">${r.ctry}</span></td>`;
@@ -263,11 +271,13 @@ function fillSelect(id,vals){
   s.innerHTML='<option value="">All</option>'+[...new Set(vals.filter(Boolean))].sort().map(v=>`<option>${v}</option>`).join('');
 }
 fetch('data.json').then(r=>r.json()).then(d=>{
+  BASE=d.baseline;
   DATA=d.rows.map(r=>({...r,cat:categorize(r)}));
   kmax=Math.max(...DATA.map(r=>r.k||0));
   document.getElementById('metabox');
   document.querySelector('.sub').insertAdjacentHTML('beforeend',
-    ` &nbsp;·&nbsp; <b>${d.n.toLocaleString()}</b> stocks &nbsp;·&nbsp; generated <b>${d.generated}</b>`);
+    ` &nbsp;·&nbsp; <b>${d.n.toLocaleString()}</b> stocks &nbsp;·&nbsp; generated <b>${d.generated}</b>`
+    +(d.baseline?` &nbsp;·&nbsp; <span class="mv pos">Δ</span> vs <b>${d.baseline}</b>`:''));
   fillSelect('fCtry',DATA.map(r=>r.ctry));
   fillSelect('fIdx',DATA.map(r=>r.idx));
   fillSelect('fSec',DATA.map(r=>r.sec));
