@@ -40,7 +40,7 @@ tbody tr:hover{background:#1b212833}
 tbody tr:hover{background:var(--card)}
 .tk{font-family:var(--mono);font-weight:700;letter-spacing:.02em}
 .tk:hover{color:var(--green)}
-.nm{color:var(--mute);font-size:11.5px;max-width:230px;overflow:hidden;text-overflow:ellipsis}
+.nm{color:var(--mute);font-size:11.5px;overflow:hidden;text-overflow:ellipsis}
 .rk{color:var(--dim)}
 .pos{color:var(--green)} .neg{color:var(--clay)} .neu{color:var(--mute)}
 .mv{font-family:var(--mono);font-size:11px;font-weight:600;white-space:nowrap}
@@ -78,14 +78,16 @@ thead th{z-index:5}
 .wrap tbody td:nth-child(-n+7){z-index:3;background:var(--ink)}
 .wrap tbody tr:hover td:nth-child(-n+7){background:var(--card)}
 .wrap thead th:nth-child(-n+7){z-index:6}
-.wrap :is(th,td):nth-child(1){left:0;width:40px;min-width:40px;max-width:40px}
-.wrap :is(th,td):nth-child(2){left:40px;width:66px;min-width:66px;max-width:66px}
-.wrap :is(th,td):nth-child(3){left:106px;width:150px;min-width:150px;max-width:150px}
-.wrap :is(th,td):nth-child(4){left:256px;width:46px;min-width:46px;max-width:46px}
-.wrap :is(th,td):nth-child(5){left:302px;width:92px;min-width:92px;max-width:92px}
-.wrap :is(th,td):nth-child(6){left:394px;width:104px;min-width:104px;max-width:104px}
-.wrap :is(th,td):nth-child(7){left:498px;width:74px;min-width:74px;max-width:74px;box-shadow:inset -1px 0 0 var(--hair2)}
-@media(max-width:720px){.sec-col{display:none}.wrap :is(th,td):nth-child(-n+7){position:static}.wrap :is(th,td):nth-child(3){width:130px;min-width:130px;max-width:130px}}
+/* Per-column widths and the sticky left-offsets of the 7 frozen columns are computed
+   in JS (applyColCss) so every column is drag-resizable. Only the frozen/scroll
+   divider lives here. */
+.wrap thead th:nth-child(7),.wrap tbody td:nth-child(7){box-shadow:inset -1px 0 0 var(--hair2)}
+.rsz{position:absolute;top:0;right:0;width:11px;height:100%;cursor:col-resize;touch-action:none;z-index:8}
+.rsz::after{content:"";position:absolute;right:3px;top:24%;height:52%;width:2px;background:var(--hair2);border-radius:1px}
+.rsz:hover::after,.rsz.live::after{background:var(--green)}
+.hdbtn{background:var(--card);border:1px solid var(--hair2);color:var(--mute);font-family:var(--sans);font-size:11px;font-weight:600;letter-spacing:.03em;padding:7px 11px;border-radius:5px;cursor:pointer;align-self:flex-end}
+.hdbtn:hover{color:var(--bone);border-color:var(--mute)}
+@media(max-width:720px){.sec-col{display:none}.wrap :is(th,td):nth-child(-n+7){position:static}}
 </style>
 </head>
 <body>
@@ -111,6 +113,7 @@ thead th{z-index:5}
   <label>Type<select id="fCat"><option value="">All</option><option value="firing">Compounder firing</option><option value="resting">Quality resting</option><option value="cyclical">Cyclical momentum</option><option value="none">No clear trend</option></select></label>
   <label class="chk"><input type="checkbox" id="fS2"/> Stage-2 trend only</label>
   <label class="chk"><input type="checkbox" id="fLiq"/> Liquid &gt;$5m/day</label>
+  <button id="rcols" class="hdbtn" type="button" title="Restore default column widths">Reset columns</button>
 </div>
 
 <div class="wrap">
@@ -167,6 +170,56 @@ const COLS=[
 ];
 let DATA=[], view=[], sortK='m12_1', sortAsc=false, kmax=1, BASE=null;
 
+// ---- Resizable columns -------------------------------------------------------
+// Sensible defaults; the 7 frozen identity columns MUST have a width so their
+// sticky left-offsets can be summed. Scrolling numeric columns are left auto
+// unless the user resizes them.
+const DEFW={rank:42,dr:60,t:82,name:210,ctry:54,cat:96,sec:124};
+const CW_KEY='mb_colw_v1';
+let colW={...DEFW};
+try{const s=JSON.parse(localStorage.getItem(CW_KEY)||'{}');if(s&&typeof s==='object')colW={...DEFW,...s};}catch(e){}
+function saveCols(){try{localStorage.setItem(CW_KEY,JSON.stringify(colW));}catch(e){}}
+const colStyle=document.createElement('style');document.head.appendChild(colStyle);
+function applyColCss(){
+  let css='',left=0;
+  COLS.forEach((c,i)=>{
+    const p=i+1; const frozen=p<=7;
+    let w=colW[c.k]; if(w==null&&frozen)w=DEFW[c.k]||60;
+    if(w!=null)css+=`.wrap :is(th,td):nth-child(${p}){width:${w}px;min-width:${w}px;max-width:${w}px}`;
+    if(frozen){css+=`.wrap :is(th,td):nth-child(${p}){left:${left}px}`;left+=(w||60);}
+  });
+  colStyle.textContent=css;
+}
+function autosize(k){
+  const p=COLS.findIndex(c=>c.k===k)+1; if(!p)return;
+  const th=document.querySelector(`#hr th:nth-child(${p})`);
+  let mx=th?th.scrollWidth:0;
+  const cells=document.querySelectorAll(`#tb tr td:nth-child(${p})`);
+  const lim=Math.min(cells.length,500);
+  for(let i=0;i<lim;i++){const s=cells[i].scrollWidth; if(s>mx)mx=s;}
+  colW[k]=Math.max(40,Math.min(440,mx+8)); applyColCss(); saveCols();
+}
+let rz=null;
+function rzDown(e){
+  const h=e.target.closest('.rsz'); if(!h)return;
+  e.preventDefault(); e.stopPropagation();
+  const th=h.closest('th');
+  rz={k:h.dataset.k,x:e.clientX,w:Math.round(th.getBoundingClientRect().width)};
+  h.classList.add('live'); h.setPointerCapture&&h.setPointerCapture(e.pointerId);
+  document.body.style.cursor='col-resize';
+}
+function rzMove(e){
+  if(!rz)return;
+  colW[rz.k]=Math.max(34,Math.min(440,rz.w+Math.round(e.clientX-rz.x)));
+  applyColCss();
+}
+function rzUp(){
+  if(!rz)return; rz=null; document.body.style.cursor='';
+  document.querySelectorAll('.rsz.live').forEach(h=>h.classList.remove('live'));
+  saveCols();
+}
+function resetCols(){colW={...DEFW}; try{localStorage.removeItem(CW_KEY);}catch(e){} applyColCss();}
+
 const CAT={firing:['Firing','ct-firing'],resting:['Resting','ct-resting'],cyclical:['Cyclical','ct-cyclical'],none:['flat','ct-none']};
 function categorize(r){
   const k1=r.k, k5=r.k5;
@@ -210,11 +263,21 @@ const sign=v=>v===null?'neu':v>0?'pos':v<0?'neg':'neu';
 
 function buildHead(){
   document.getElementById('hr').innerHTML=COLS.map(c=>
-    `<th class="${c.cls||''}" data-k="${c.k}"${c.ti?` title="${c.ti}"`:''}>${c.t}<span class="ar" data-ar="${c.k}"></span></th>`).join('');
-  document.querySelectorAll('#hr th').forEach(th=>th.onclick=()=>{
+    `<th class="${c.cls||''}" data-k="${c.k}"${c.ti?` title="${c.ti}"`:''}>${c.t}<span class="ar" data-ar="${c.k}"></span><span class="rsz" data-k="${c.k}" title="Drag to resize · double-click to auto-fit"></span></th>`).join('');
+  document.querySelectorAll('#hr th').forEach(th=>th.onclick=e=>{
+    if(e.target.closest('.rsz'))return;        // ignore clicks on the resize grip
     const k=th.dataset.k; if(k==='rank')return;
     if(sortK===k)sortAsc=!sortAsc; else{sortK=k;sortAsc=false;} render();
   });
+  document.querySelectorAll('#hr .rsz').forEach(h=>{
+    h.addEventListener('pointerdown',rzDown);
+    h.addEventListener('pointermove',rzMove);
+    h.addEventListener('pointerup',rzUp);
+    h.addEventListener('pointercancel',rzUp);
+    h.addEventListener('click',e=>e.stopPropagation());
+    h.addEventListener('dblclick',e=>{e.stopPropagation();autosize(h.dataset.k);});
+  });
+  applyColCss();
 }
 function passes(r){
   if(PRESET_PRED && !PRESET_PRED(r))return false;
@@ -296,6 +359,7 @@ fetch('data.json').then(r=>r.json()).then(d=>{
     el.addEventListener(id==='q'||id.startsWith('fM')||id==='fK'?'input':'change',render);
   });
   ['fS2','fLiq','fCat'].forEach(id=>document.getElementById(id).addEventListener('change',render));
+  document.getElementById('rcols').addEventListener('click',resetCols);
   buildPresets();
   applyPreset(PRESETS.find(p=>p.id==='quality'));
 }).catch(e=>{document.getElementById('tb').innerHTML=`<tr><td class="l" style="padding:30px;color:var(--clay)">Failed to load data.json: ${e}</td></tr>`;});
